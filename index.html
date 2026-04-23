@@ -1,347 +1,472 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>美国城市人口数量变化 - WebGIS应用</title>
-    <!-- 引入 ArcGIS Maps SDK for JavaScript 5.0 的 CSS 和组件库 -->
-    <link rel="stylesheet" href="https://js.arcgis.com/5.0/esri/themes/light/main.css" />
-    <script type="module" src="https://js.arcgis.com/5.0/@arcgis/core/init.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <title>地图微件完整版 | 场所查询 + 美国人口动态图 | ArcGIS Maps SDK for JavaScript</title>
 
-        body {
-            font-family: 'Segoe UI', 'Roboto', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden;
-            background-color: #f5f5f5;
-        }
+  <!-- 加载 ArcGIS Maps SDK for JavaScript (CDN) -->
+  <script type="module" src="https://js.arcgis.com/5.0/"></script>
 
-        /* ================= 三区域布局：页眉 + 地图区域 + 底图库区域 ================= */
-        .app-container {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            width: 100%;
-        }
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
 
-        /* ----- 区域1：页眉 (Header) ----- */
-        .app-header {
-            background: linear-gradient(135deg, #1a2a4f 0%, #0f1a2e 100%);
-            color: white;
-            padding: 0 28px;
-            height: 64px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-            z-index: 20;
-            flex-shrink: 0;
-        }
+    /* 自定义微件容器样式 */
+    .widget-panel {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      overflow: hidden;
+    }
 
-        .logo-area {
-            display: flex;
-            align-items: baseline;
-            gap: 12px;
-        }
+    /* 帮助面板内容样式 */
+    arcgis-expand span {
+      padding: 12px;
+      width: 320px;
+      display: block;
+      line-height: 1.5;
+    }
 
-        .logo-area h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            letter-spacing: 1px;
-        }
+    /* 自定义tooltip样式 */
+    .tooltip {
+      position: absolute;
+      pointer-events: none;
+      transition: opacity 200ms;
+      z-index: 1000;
+    }
 
-        .logo-area h1 span {
-            color: #4c9aff;
-            font-weight: 300;
-        }
+    .tooltip > div {
+      margin: 0 auto;
+      padding: 12px 14px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      transform: translate3d(-50%, -125%, 0);
+      font-size: 13px;
+      background-color: white;
+      line-height: 1.4em;
+      border: 1px solid rgba(0,0,0,0.1);
+      max-width: 320px;
+      pointer-events: auto;
+      font-weight: normal;
+    }
 
-        .subtitle {
-            font-size: 0.8rem;
-            opacity: 0.75;
-            background: rgba(255,255,255,0.15);
-            padding: 4px 12px;
-            border-radius: 20px;
-        }
+    .tooltip a {
+      color: #0079c1;
+      text-decoration: none;
+      word-break: break-all;
+    }
+    .tooltip a:hover {
+      text-decoration: underline;
+    }
 
-        .header-stats {
-            display: flex;
-            gap: 20px;
-            font-size: 0.85rem;
-        }
+    /* 加载提示 */
+    .loading-overlay {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 6px 14px;
+      border-radius: 24px;
+      font-size: 12px;
+      font-family: monospace;
+      z-index: 999;
+      pointer-events: none;
+      backdrop-filter: blur(4px);
+      transition: opacity 0.5s;
+    }
 
-        .header-stats .stat {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .stat i {
-            font-style: normal;
-            font-weight: 600;
-            color: #4c9aff;
-        }
-
-        /* ----- 主体区域：地图区域 + 右侧底图库面板 (实现地图区域和底图库区域分离) ----- */
-        .main-content {
-            display: flex;
-            flex: 1;
-            min-height: 0;
-            position: relative;
-        }
-
-        /* 区域2：地图区域 (Map Container) */
-        .map-container {
-            flex: 1;
-            position: relative;
-            background-color: #e0e4e8;
-        }
-
-        /* arcgis-map 组件需占满整个容器 */
-        .map-container arcgis-map {
-            display: block;
-            width: 100%;
-            height: 100%;
-        }
-
-        /* 区域3：底图库区域 (Basemap Gallery Panel) - 右侧浮动面板风格 */
-        .basemap-panel {
-            width: 280px;
-            background: rgba(255, 255, 255, 0.96);
-            backdrop-filter: blur(10px);
-            border-left: 1px solid rgba(0, 0, 0, 0.1);
-            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.08);
-            display: flex;
-            flex-direction: column;
-            z-index: 15;
-            transition: transform 0.2s ease;
-            flex-shrink: 0;
-            overflow-y: auto;
-        }
-
-        .basemap-header {
-            padding: 20px 20px 12px;
-            border-bottom: 1px solid #eee;
-            font-weight: 600;
-            font-size: 1rem;
-            color: #1a2a4f;
-            background: white;
-            position: sticky;
-            top: 0;
-            z-index: 1;
-        }
-
-        .basemap-header p {
-            font-size: 0.75rem;
-            font-weight: normal;
-            color: #6c757d;
-            margin-top: 6px;
-        }
-
-        .basemap-gallery-wrapper {
-            padding: 12px 16px 20px;
-        }
-
-        /* 响应式：小屏幕时底图库变为底部抽屉样式 */
-        @media (max-width: 768px) {
-            .basemap-panel {
-                position: fixed;
-                bottom: 0;
-                right: 0;
-                left: 0;
-                width: 100%;
-                height: 45%;
-                border-left: none;
-                border-top: 1px solid rgba(0,0,0,0.1);
-                transform: translateY(0);
-                border-radius: 16px 16px 0 0;
-            }
-            .app-header .header-stats {
-                display: none;
-            }
-        }
-
-        /* 微件自定义位置样式 */
-        arcgis-legend {
-            --calcite-color-foreground-1: rgba(255,255,255,0.95);
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        
-        arcgis-layer-list {
-            --calcite-color-foreground-1: rgba(255,255,255,0.95);
-            border-radius: 12px;
-            max-height: 320px;
-            width: 260px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        
-        arcgis-search {
-            --calcite-color-foreground-1: white;
-            border-radius: 32px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        
-        arcgis-scale-bar {
-            background: rgba(255,255,255,0.85);
-            padding: 4px 8px;
-            border-radius: 20px;
-            backdrop-filter: blur(4px);
-        }
-    </style>
+    /* 适配移动端微件间距 */
+    @media (max-width: 600px) {
+      .tooltip > div {
+        max-width: 260px;
+        font-size: 12px;
+        padding: 8px 10px;
+      }
+    }
+  </style>
 </head>
 <body>
-<div class="app-container">
-    <!-- 区域1：页眉区域 -->
-    <header class="app-header">
-        <div class="logo-area">
-            <h1>UrbanPulse <span>| 美国城市人口变迁</span></h1>
-            <div class="subtitle">人口数量空间分布</div>
-        </div>
-        <div class="header-stats">
-            <div class="stat">📍 覆盖城市: <i>300+</i></div>
-            <div class="stat">📊 数据字段: <i>Population</i></div>
-            <div class="stat">🗺️ GeoScene Online 权威发布</div>
-        </div>
-    </header>
-
-    <div class="main-content">
-        <!-- 区域2：地图区域 -->
-        <div class="map-container">
-            <arcgis-map id="mainMap" 
-                        basemap="topo-vector"
-                        style="width: 100%; height: 100%;">
-                
-                <!-- 搜索框微件 -->
-                <arcgis-search position="top-right" 
-                               go-to-location-enabled
-                               include-default-sources>
-                </arcgis-search>
-                
-                <!-- 图层列表微件（图层控制） -->
-                <arcgis-layer-list position="top-left" 
-                                   visible-elements="['status-indicator', 'toggle']">
-                </arcgis-layer-list>
-                
-                <!-- 图例微件 -->
-                <arcgis-legend position="bottom-right"></arcgis-legend>
-                
-                <!-- 比例尺微件 -->
-                <arcgis-scale-bar position="bottom-left" unit="dual"></arcgis-scale-bar>
-                
-            </arcgis-map>
-        </div>
-
-        <!-- 区域3：底图库区域 -->
-        <div class="basemap-panel">
-            <div class="basemap-header">
-                🗺️ 切换底图库
-                <p>选择不同底图背景，洞察人口分布</p>
-            </div>
-            <div class="basemap-gallery-wrapper">
-                <arcgis-basemap-gallery id="basemapGallery"></arcgis-basemap-gallery>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script type="module">
-    // 使用 ArcGIS Maps SDK for JavaScript 5.0 核心模块化方式
-    import Map from 'https://js.arcgis.com/5.0/@arcgis/core/Map.js';
-    import FeatureLayer from 'https://js.arcgis.com/5.0/@arcgis/core/layers/FeatureLayer.js';
+  <!-- 主地图容器 -->
+  <arcgis-map 
+    center="-100, 39" 
+    zoom="4"
+    id="mainMap">
     
-    // 获取地图组件的引用
-    const mapElement = document.getElementById('mainMap');
+    <!-- 缩放控件 (左上) -->
+    <arcgis-zoom slot="top-left"></arcgis-zoom>
     
-    // 创建底图
-    const map = new Map({
-        basemap: "topo-vector"
+    <!-- 比例尺控件 (左下) 使用 arcgis-scale-bar 组件 -->
+    <arcgis-scale-bar slot="bottom-left" unit="dual"></arcgis-scale-bar>
+    
+    <!-- 图例控件 (右上) 使用 arcgis-legend 组件 -->
+    <arcgis-legend slot="top-right"></arcgis-legend>
+    
+    <!-- 搜索框控件 (右上，图例下方) 使用 arcgis-search 组件 -->
+    <arcgis-search slot="top-right" position="top-right"></arcgis-search>
+    
+    <!-- 图层列表控件 (右上，搜索框下方) -->
+    <arcgis-layer-list slot="top-right" position="top-right"></arcgis-layer-list>
+    
+    <!-- 帮助说明面板 (左上缩放控件下方) -->
+    <arcgis-expand
+      slot="top-left"
+      expanded
+      expand-icon="question"
+      expand-tooltip="使用说明">
+      <span>
+        <strong>📌 使用指南</strong><br><br>
+        • <strong>移动鼠标</strong> 到兴趣点查看地名<br>
+        • <strong>单击 POI</strong> 获取地址、电话及官网链接<br>
+        • <strong>单击链接</strong> 可跳转场所官网<br>
+        • <strong>按 ESC</strong> 关闭信息弹窗<br><br>
+        <strong>🗺️ 图层控制</strong><br>
+        点击右上角图层列表按钮，可切换“美国人口动态地图3”的可见性及透明度<br><br>
+        <strong>🔍 搜索功能</strong><br>
+        使用右上角搜索框快速定位城市、地址或地标<br><br>
+        <strong>📏 比例尺</strong><br>
+        左下角显示公制和英制比例尺
+      </span>
+    </arcgis-expand>
+  </arcgis-map>
+  
+  <div id="loadingMessage" class="loading-overlay">🚀 加载中: 底图+人口要素图层...</div>
+
+  <script type="module">
+    // ----- 导入核心模块 -----
+    const [
+      config,
+      Basemap,
+      BasemapStyle,
+      promiseUtils,
+      places,
+      FetchPlaceParameters,
+      FeatureLayer,
+      Search
+    ] = await $arcgis.import([
+      "@arcgis/core/config.js",
+      "@arcgis/core/Basemap.js",
+      "@arcgis/core/support/BasemapStyle.js",
+      "@arcgis/core/core/promiseUtils.js",
+      "@arcgis/core/rest/places.js",
+      "@arcgis/core/rest/support/FetchPlaceParameters.js",
+      "@arcgis/core/layers/FeatureLayer.js",
+      "@arcgis/core/widgets/Search.js"
+    ]);
+
+    // 设置 API Key (必备，用于 places 服务和底图)
+    const apiKey = "AAPTa7JJHP4yRVP_Dhb63cNEcPQ..KXy7Os15imsOSmW0QpGEVB4e-SA23NUQvu9KM47ZldbYlALOpQbtuRZf1SsxMxXCziXZti4Z3jmsBXKeed1PeRaq1E_3Wyh07L4auaDWDMsvX1wQzma1sVDolK5xJIISQjOsngX-o-q6H38JuCHXuC3cdQLfgVFFnL8mtgPAk1h-eWzFpNaDlyYs_1MKGiA5IZvnr0QXCpCP4bKd5QygRU1qSCQ1EdKh525q9Lt5Mkhdh2_hd-wCsdBEZMqmaKAMAT1_arKTME4f";
+    config.apiKey = apiKey;
+
+    // 获取地图元素
+    const viewElement = document.querySelector("arcgis-map");
+    const expand = document.querySelector("arcgis-expand");
+
+    // ---------- 1. 配置带有 places 属性的底图 ----------
+    const basemap = new Basemap({
+      style: new BasemapStyle({
+        id: "arcgis/navigation",
+        places: "attributed",   // 启用 place ID，便于查询详细信息
+      }),
     });
+    viewElement.basemap = basemap;
     
-    // ========== 配置 GeoScene Online 专题图层（美国城市人口数量变化） ==========
-    // 图层 URL（已配置为你的服务地址 + 正确的图层序号 /0）
-    // 重要提示：请确保该图层在 GeoScene Online 中已设置为“公开”共享，否则会因权限问题无法加载
-    const populationLayer = new FeatureLayer({
-        url: "https://www.geosceneonline.cn/server/rest/services/Hosted/美国城市人口数量变化116165/FeatureServer/0",
-        title: "美国城市人口数量",
-        outFields: ["*"],
-        // 配置弹窗模板 - 使用 Population 字段
-        popupTemplate: {
-            title: "城市人口信息",
-            content: [
-                {
-                    type: "fields",
-                    fieldInfos: [
-                        { 
-                            fieldName: "Population", 
-                            label: "人口数量", 
-                            format: { 
-                                digitSeparator: true, 
-                                places: 0 
-                            } 
-                        }
-                    ]
-                }
+    // 等待地图视图就绪
+    await viewElement.viewOnReady();
+    
+    // 获取视图实例以便后续高级操作（例如设置搜索widget更多源）
+    const view = viewElement.view;
+    
+   
+    
+    // 获取底图内置的 places 矢量瓦片图层 (POI 图层)
+    const placesLayer = viewElement.map.allLayers.getItemAt(0);
+    
+    // ---------- 2. 添加 FeatureLayer (美国人口动态地图3) ----------
+    const featureLayerUrl = "https://www.geosceneonline.cn/server/rest/services/Hosted/美国人口动态地图3/FeatureServer";
+    
+    const populationFeatureLayer = new FeatureLayer({
+      url: featureLayerUrl,
+      title: "🇺🇸 美国人口动态地图3",
+      outFields: ["*"],
+      popupEnabled: true,
+      visible: true,
+      opacity: 0.85,
+      // 为人口图层定义更友好的弹窗模板 (显示人口关键字段)
+      popupTemplate: {
+        title: "📊 人口统计信息",
+        content: [
+          {
+            type: "fields",
+            fieldInfos: [
+              { fieldName: "State_Name", label: "州名", visible: true },
+              { fieldName: "Population", label: "总人口", visible: true, format: { digitSeparator: true } },
+              { fieldName: "Pop_White", label: "白人人口", visible: true, format: { digitSeparator: true } },
+              { fieldName: "Pop_Black", label: "黑人人口", visible: true, format: { digitSeparator: true } },
+              { fieldName: "Pop_Asian", label: "亚裔人口", visible: true, format: { digitSeparator: true } },
+              { fieldName: "Year", label: "数据年份", visible: true }
             ]
-        },
-        // 设置点样式渲染
-        renderer: {
-            type: "simple",
-            symbol: {
-                type: "simple-marker",
-                size: 10,
-                color: "#ff6b4a",
-                outline: {
-                    width: 1,
-                    color: "white"
-                }
-            }
+          }
+        ]
+      }
+    });
+    
+    // 将要素图层添加到地图中
+    viewElement.map.layers.add(populationFeatureLayer);
+    
+    // 更新加载提示
+    const loadingDiv = document.getElementById("loadingMessage");
+    if (loadingDiv) {
+      loadingDiv.innerHTML = "✅ 要素图层已添加 | 可使用图层列表、图例和搜索";
+      setTimeout(() => {
+        loadingDiv.style.opacity = "0";
+        setTimeout(() => {
+          if (loadingDiv) loadingDiv.style.display = "none";
+        }, 800);
+      }, 4000);
+    }
+    
+    // 处理图层加载失败情况
+    populationFeatureLayer.catch((err) => {
+      console.error("人口要素图层加载失败", err);
+      if (loadingDiv) {
+        loadingDiv.innerHTML = "⚠️ 人口图层加载失败, 但POI查询功能正常";
+        loadingDiv.style.backgroundColor = "rgba(180,60,50,0.85)";
+      }
+    });
+    
+    // 为要素图层准备图例支持 (图例会通过 arcgis-legend 自动识别)
+    console.log("图层总数:", viewElement.map.allLayers.length);
+    
+    // ---------- 3. 搜索框增强 (确保搜索基于世界地理编码) ----------
+    // arcgis-search 组件本身已内置默认的地理编码服务，无需额外编码，但是可以设置参数
+    // 由于我们使用自定义元素 <arcgis-search>，但也支持通过JS获取其widget进行配置
+    // 为了更好的体验，可配置搜索源 (包含当前底图poi，但默认已经够用)
+    const searchWidget = document.querySelector("arcgis-search");
+    if (searchWidget && searchWidget.widget) {
+      // 如果组件已经初始化，可进一步配置
+      try {
+        const search = searchWidget.widget;
+        search.popupEnabled = true;
+        search.autoSelect = true;
+        search.includeDefaultSources = true;
+        // 添加一个自定义源搜索要素图层中的地名（可选）
+        console.log("搜索组件已就绪");
+      } catch(e){}
+    } else {
+      // 如果未直接暴露，通过视图添加一个小型搜索增强（可选）
+      console.log("搜索组件已通过HTML集成");
+    }
+    
+    // ---------- 4. POI 交互逻辑: tooltip + 单击详情 ----------
+    let vtlTooltip = createTooltip();
+    let hoverGraphic = null;
+    let searchedPlaceId = null;
+    let currentDisplayContent = "";
+    const tooltipDiv = document.getElementById("vtlTooltip");
+    
+    // 防抖命中测试 (提升性能)
+    const hitTest = await promiseUtils.debounce(async (event) => {
+      if (!placesLayer) return null;
+      const hit = await viewElement.hitTest(event, { include: placesLayer });
+      if (hit.results.length) {
+        const placesHitResults = hit.results.filter(result => 
+          result.graphic && result.graphic.attributes && result.graphic.attributes["esri_place_id"]
+        );
+        if (placesHitResults.length) {
+          const filteredGraphics = await Promise.all(
+            placesHitResults.map(async (filterResult) => {
+              if (hoverGraphic?.attributes["esri_place_id"] === filterResult.graphic.attributes["esri_place_id"]) {
+                return hoverGraphic;
+              } else {
+                hoverGraphic = filterResult.graphic.clone();
+                return hoverGraphic;
+              }
+            })
+          );
+          if (filteredGraphics.length) {
+            filteredGraphics.screenPoint = hit.screenPoint;
+            return filteredGraphics;
+          }
         }
+      }
+      return null;
+    }, 50);
+    
+    // 根据placeId获取详细场所信息
+    async function getPlaceDetails(placeId) {
+      const fetchPlaceParameters = new FetchPlaceParameters({
+        apiKey,
+        placeId,
+        requestedFields: ["all"],
+      });
+      const fetchPlaceResult = await places.fetchPlace(fetchPlaceParameters);
+      return fetchPlaceResult.placeDetails;
+    }
+    
+    // 鼠标移动显示名称
+    viewElement.addEventListener("arcgisViewPointerMove", async (event) => {
+      try {
+        const hits = await hitTest(event.detail);
+        if (hits && hits.length > 0 && hits[0].attributes) {
+          const placeName = hits[0].attributes["_name"] || "兴趣点";
+          vtlTooltip.show(hits.screenPoint, `🏷️ ${placeName}`);
+        } else {
+          vtlTooltip.hide();
+        }
+      } catch(e) {}
     });
     
-    // 将专题图层添加到地图
-    map.add(populationLayer);
-    
-    // 将配置好的 Map 实例赋值给 arcgis-map 组件
-    mapElement.map = map;
-    
-    // 等待地图组件加载完成，设置视图范围（美国本土范围）
-    mapElement.when(() => {
-        mapElement.goTo({
-            center: [-100, 38],
-            zoom: 4,
-            scale: 15000000
-        }, { duration: 800 }).catch(err => console.warn("视图跳转异常", err));
+    // 单击显示详情
+    viewElement.addEventListener("arcgisViewClick", async (event) => {
+      const hits = await hitTest(event.detail);
+      if (hits && hits.length > 0) {
+        const graphic = hits[0];
+        const placeId = graphic.attributes["esri_place_id"];
+        if (!placeId) return;
         
-        // 控制台输出提示
-        console.log("WebGIS应用已启动 | ArcGIS Maps SDK for JavaScript 5.0");
-        console.log("专题图层URL: https://www.geosceneonline.cn/server/rest/services/Hosted/美国城市人口数量变化116165/FeatureServer/0");
-        console.log("提示：如图层未显示，请检查该图层在GeoScene Online中是否已设置为'公开'共享");
+        if (placeId === searchedPlaceId && currentDisplayContent) {
+          if (tooltipDiv) tooltipDiv.style["pointer-events"] = "auto";
+          vtlTooltip.show({ x: event.detail.x, y: event.detail.y }, currentDisplayContent);
+          return;
+        }
+        
+        try {
+          const placeDetails = await getPlaceDetails(placeId);
+          searchedPlaceId = placeDetails.placeId || placeId;
+          
+          const addrParts = [
+            placeDetails?.address?.streetAddress,
+            placeDetails?.address?.locality,
+            placeDetails?.address?.region,
+            placeDetails?.address?.postcode
+          ].filter(Boolean);
+          const address = addrParts.join(", ");
+          const phone = placeDetails?.contactInfo?.telephone || "";
+          const website = placeDetails?.contactInfo?.website || "";
+          
+          let content = `<strong>${graphic.attributes["_name"] || "场所"}</strong>`;
+          if (address) content += `<br>📍 ${address}`;
+          if (phone) content += `<br>📞 ${phone}`;
+          if (website) content += `<br>🌐 <a href="${website}" target="_blank" rel="noopener">${website.replace(/^https?:\/\//, '')}</a>`;
+          if (!address && !phone && !website) content += `<br>ℹ️ 暂无详细信息`;
+          
+          currentDisplayContent = content;
+          if (tooltipDiv) tooltipDiv.style["pointer-events"] = "auto";
+          vtlTooltip.show({ x: event.detail.x, y: event.detail.y }, content);
+        } catch (err) {
+          vtlTooltip.show({ x: event.detail.x, y: event.detail.y }, `<strong>${graphic.attributes["_name"] || "场所"}</strong><br>⚠️ 详情获取失败`);
+        }
+      } else {
+        vtlTooltip.hide();
+        // 未点击POI时不重置placeId，避免快速误判，但保持清除标记
+        if (!hits) {
+          // 如果点击背景且鼠标没在tooltip上，建议延时隐藏(但直接hide足够)
+        }
+      }
     });
     
-    // 底图库联动：将底图库组件与主地图关联
-    const basemapGallery = document.getElementById('basemapGallery');
-    if (basemapGallery) {
-        basemapGallery.view = mapElement;
-        basemapGallery.source = {
-            portal: { url: "https://www.arcgis.com" }
-        };
+    // ESC关闭弹窗
+    viewElement.addEventListener("arcgisViewKeyDown", (event) => {
+      if (event.detail.key === "Escape") {
+        if (tooltipDiv) tooltipDiv.style["pointer-events"] = "none";
+        vtlTooltip.hide();
+        searchedPlaceId = null;
+        currentDisplayContent = "";
+      }
+    });
+    
+    // 避免拖拽时残留tooltip
+    viewElement.addEventListener("arcgisViewDragStart", () => {
+      vtlTooltip.hide();
+    });
+    
+    // 创建平滑tooltip函数
+    function createTooltip() {
+      const tooltip = document.createElement("div");
+      tooltip.id = "vtlTooltip";
+      tooltip.setAttribute("role", "tooltip");
+      tooltip.classList.add("tooltip");
+      const textElement = document.createElement("div");
+      tooltip.appendChild(textElement);
+      viewElement.appendChild(tooltip);
+      
+      let x = 0, y = 0, targetX = 0, targetY = 0;
+      let visible = false;
+      let animFrame = null;
+      
+      function move() {
+        x += (targetX - x) * 0.12;
+        y += (targetY - y) * 0.12;
+        const needContinue = (Math.abs(targetX - x) > 0.5 || Math.abs(targetY - y) > 0.5);
+        tooltip.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+        if (needContinue) {
+          animFrame = requestAnimationFrame(move);
+        } else {
+          if (animFrame) cancelAnimationFrame(animFrame);
+          animFrame = null;
+        }
+      }
+      
+      return {
+        show: (point, htmlContent) => {
+          if (!visible) { x = point.x; y = point.y; }
+          targetX = point.x;
+          targetY = point.y;
+          tooltip.style.opacity = "1";
+          visible = true;
+          textElement.innerHTML = htmlContent;
+          if (animFrame) cancelAnimationFrame(animFrame);
+          animFrame = requestAnimationFrame(move);
+        },
+        hide: () => {
+          tooltip.style.opacity = "0";
+          visible = false;
+          if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+        }
+      };
     }
     
-    // 图层列表配置
-    const layerList = document.querySelector('arcgis-layer-list');
-    if (layerList) {
-        layerList.visibleElements = {
-            'status-indicator': true,
-            'toggle': true,
-            'opacity-slider': true
-        };
+    // 延迟5秒折叠帮助面板
+    setTimeout(() => {
+      if (expand) expand.expanded = false;
+    }, 5000);
+    
+    // ---------- 5. 微件附加说明: 比例尺、图例、图层列表、搜索框已通过HTML声明方式集成，无需额外代码。但为确保图层列表显示正确，需要给 FeatureLayer 合适的 title ----------
+    // 由于 FeatureLayer 已经设置了 title: "🇺🇸 美国人口动态地图3"，图例和图层列表都会自动识别。
+    // 同时为了底图POI图层在图层列表中显示友好，可以设置底图层title（但底图层通常是基础图层，可能默认不可见在图例中，无需关心）
+    
+    // 额外: 如果希望图层列表显示更丰富，确保地图里图层名称可读
+    if (populationFeatureLayer.title) {
+      console.log("图层列表将显示: ", populationFeatureLayer.title);
     }
-</script>
+    
+    // 针对图例, 人口要素图层的渲染器如果服务端提供，图例会表现其样式；若无渲染器，会显示默认点。
+    // 搜索优化：监听搜索完成缩放到结果并显示弹窗（可选，默认行为良好）
+    // 如果搜索组件需要调整位置（已经在右上slot，多个slot同侧会按顺序排列，完美）
+    
+    // 添加一个初始欢迎提示控制台信息
+    console.log("完整微件地图已启动: 比例尺,图例,搜索,图层列表均已加载");
+    
+    // 可选：处理图层列表的样式微调 (由于arcgis-layer-list组件内置，无需额外)
+    // 确保所有微件在移动端可交互
+    
+    // 修复因为layer-list和legend同时存在带来的重叠问题: 通过slot排列顺次，无碍
+    // 临时增加对Search组件的customize（可选）
+    setTimeout(() => {
+      const searchEl = document.querySelector("arcgis-search");
+      if (searchEl && searchEl.widget && searchEl.widget.viewModel) {
+        // 设置搜索提示
+        searchEl.widget.viewModel.includeDefaultSources = true;
+        console.log("搜索组件激活，可输入地名");
+      }
+    }, 1500);
+    
+    // 添加比例尺单位说明: arcgis-scale-bar 已使用 unit="dual" 显示英里和公里
+  </script>
 </body>
 </html>
