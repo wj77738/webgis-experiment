@@ -3,297 +3,345 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>WebGIS实验六 - 美国城市人口分布</title>
-    <!-- 使用国内CDN -->
-    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/arcgis-js-api/5.0.0/esri/themes/light/main.css" />
+    <title>美国城市人口数量变化 - WebGIS应用</title>
+    <!-- 引入 ArcGIS Maps SDK for JavaScript 5.0 的 CSS 和组件库 -->
+    <link rel="stylesheet" href="https://js.arcgis.com/5.0/esri/themes/light/main.css" />
+    <script type="module" src="https://js.arcgis.com/5.0/@arcgis/core/init.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            height: 100vh;
-            overflow: hidden;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        
+
+        body {
+            font-family: 'Segoe UI', 'Roboto', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            background-color: #f5f5f5;
+        }
+
+        /* ================= 三区域布局：页眉 + 地图区域 + 底图库区域 ================= */
         .app-container {
             display: flex;
             flex-direction: column;
             height: 100vh;
+            width: 100%;
         }
-        
-        .header {
-            background: #2c3e66;
+
+        /* ----- 区域1：页眉 (Header) ----- */
+        .app-header {
+            background: linear-gradient(135deg, #1a2a4f 0%, #0f1a2e 100%);
             color: white;
-            padding: 12px 24px;
+            padding: 0 28px;
+            height: 64px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            z-index: 10;
+            justify-content: space-between;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            z-index: 20;
+            flex-shrink: 0;
         }
-        
+
+        .logo-area {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+        }
+
         .logo-area h1 {
-            font-size: 1.4rem;
-            margin-bottom: 4px;
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: 1px;
         }
-        
-        .logo-area p {
-            font-size: 0.75rem;
-            opacity: 0.85;
+
+        .logo-area h1 span {
+            color: #4c9aff;
+            font-weight: 300;
         }
-        
-        .stats {
+
+        .subtitle {
+            font-size: 0.8rem;
+            opacity: 0.75;
+            background: rgba(255,255,255,0.15);
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+
+        .header-stats {
             display: flex;
             gap: 20px;
-            background: rgba(255,255,255,0.15);
-            padding: 6px 18px;
-            border-radius: 30px;
+            font-size: 0.85rem;
         }
-        
-        .stat-item {
-            text-align: center;
+
+        .header-stats .stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
-        
-        .stat-value {
-            font-weight: bold;
-            font-size: 1.1rem;
+
+        .stat i {
+            font-style: normal;
+            font-weight: 600;
+            color: #4c9aff;
         }
-        
-        .stat-label {
-            font-size: 0.65rem;
-            opacity: 0.8;
-        }
-        
+
+        /* ----- 主体区域：地图区域 + 右侧底图库面板 (实现地图区域和底图库区域分离) ----- */
         .main-content {
             display: flex;
             flex: 1;
-            overflow: hidden;
-        }
-        
-        .map-container {
-            flex: 4;
+            min-height: 0;
             position: relative;
         }
-        
-        #viewDiv {
+
+        /* 区域2：地图区域 (Map Container) */
+        .map-container {
+            flex: 1;
+            position: relative;
+            background-color: #e0e4e8;
+        }
+
+        /* arcgis-map 组件需占满整个容器 */
+        .map-container arcgis-map {
+            display: block;
             width: 100%;
             height: 100%;
         }
-        
-        .basemap-gallery {
-            flex: 1;
-            background: #2c2c3a;
-            color: white;
-            padding: 16px;
+
+        /* 区域3：底图库区域 (Basemap Gallery Panel) - 右侧浮动面板风格 */
+        .basemap-panel {
+            width: 280px;
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(10px);
+            border-left: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.08);
+            display: flex;
+            flex-direction: column;
+            z-index: 15;
+            transition: transform 0.2s ease;
+            flex-shrink: 0;
             overflow-y: auto;
-            box-shadow: -2px 0 10px rgba(0,0,0,0.2);
         }
-        
-        .basemap-gallery h3 {
+
+        .basemap-header {
+            padding: 20px 20px 12px;
+            border-bottom: 1px solid #eee;
+            font-weight: 600;
             font-size: 1rem;
-            margin-bottom: 12px;
-            padding-bottom: 6px;
-            border-bottom: 2px solid #4a90e2;
-            display: inline-block;
+            color: #1a2a4f;
+            background: white;
+            position: sticky;
+            top: 0;
+            z-index: 1;
         }
-        
-        .basemap-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-            margin-bottom: 20px;
+
+        .basemap-header p {
+            font-size: 0.75rem;
+            font-weight: normal;
+            color: #6c757d;
+            margin-top: 6px;
         }
-        
-        .basemap-card {
-            background: rgba(255,255,255,0.1);
-            border-radius: 8px;
-            padding: 8px;
-            cursor: pointer;
-            text-align: center;
-            transition: all 0.2s;
+
+        .basemap-gallery-wrapper {
+            padding: 12px 16px 20px;
         }
-        
-        .basemap-card:hover {
-            background: #4a90e2;
-            transform: translateY(-2px);
-        }
-        
-        .basemap-card.active {
-            background: #4a90e2;
-            border: 1px solid white;
-        }
-        
-        .basemap-icon {
-            font-size: 1.5rem;
-        }
-        
-        .basemap-name {
-            font-size: 0.7rem;
-            margin-top: 4px;
-        }
-        
-        .info-panel {
-            background: rgba(0,0,0,0.3);
-            border-radius: 8px;
-            padding: 12px;
-            font-size: 0.7rem;
-            margin-top: 16px;
-        }
-        
-        .info-panel p {
-            margin: 6px 0;
-            color: #ccc;
-        }
-        
+
+        /* 响应式：小屏幕时底图库变为底部抽屉样式 */
         @media (max-width: 768px) {
-            .header { flex-direction: column; gap: 8px; padding: 10px; }
-            .main-content { flex-direction: column; }
-            .basemap-gallery { flex: none; max-height: 200px; }
-            .basemap-grid { grid-template-columns: repeat(3, 1fr); }
+            .basemap-panel {
+                position: fixed;
+                bottom: 0;
+                right: 0;
+                left: 0;
+                width: 100%;
+                height: 45%;
+                border-left: none;
+                border-top: 1px solid rgba(0,0,0,0.1);
+                transform: translateY(0);
+                border-radius: 16px 16px 0 0;
+            }
+            .app-header .header-stats {
+                display: none;
+            }
+        }
+
+        /* 微件自定义位置样式 */
+        arcgis-legend {
+            --calcite-color-foreground-1: rgba(255,255,255,0.95);
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        arcgis-layer-list {
+            --calcite-color-foreground-1: rgba(255,255,255,0.95);
+            border-radius: 12px;
+            max-height: 320px;
+            width: 260px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        arcgis-search {
+            --calcite-color-foreground-1: white;
+            border-radius: 32px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        arcgis-scale-bar {
+            background: rgba(255,255,255,0.85);
+            padding: 4px 8px;
+            border-radius: 20px;
+            backdrop-filter: blur(4px);
         }
     </style>
 </head>
 <body>
-    <div class="app-container">
-        <header class="header">
-            <div class="logo-area">
-                <h1>🗺️ WebGIS实验六 - 美国城市人口分布</h1>
-                <p>基于 ArcGIS Maps SDK 5.0 | GeoScene Online 专题图层</p>
-            </div>
-            <div class="stats">
-                <div class="stat-item">
-                    <div class="stat-value" id="cityCount">--</div>
-                    <div class="stat-label">城市数量</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="zoomLevel">--</div>
-                    <div class="stat-label">缩放层级</div>
-                </div>
-            </div>
-        </header>
+<div class="app-container">
+    <!-- 区域1：页眉区域 -->
+    <header class="app-header">
+        <div class="logo-area">
+            <h1>UrbanPulse <span>| 美国城市人口变迁</span></h1>
+            <div class="subtitle">人口数量空间分布</div>
+        </div>
+        <div class="header-stats">
+            <div class="stat">📍 覆盖城市: <i>300+</i></div>
+            <div class="stat">📊 数据字段: <i>Population</i></div>
+            <div class="stat">🗺️ GeoScene Online 权威发布</div>
+        </div>
+    </header>
 
-        <div class="main-content">
-            <div class="map-container">
-                <div id="viewDiv"></div>
+    <div class="main-content">
+        <!-- 区域2：地图区域 -->
+        <div class="map-container">
+            <arcgis-map id="mainMap" 
+                        basemap="topo-vector"
+                        style="width: 100%; height: 100%;">
+                
+                <!-- 搜索框微件 -->
+                <arcgis-search position="top-right" 
+                               go-to-location-enabled
+                               include-default-sources>
+                </arcgis-search>
+                
+                <!-- 图层列表微件（图层控制） -->
+                <arcgis-layer-list position="top-left" 
+                                   visible-elements="['status-indicator', 'toggle']">
+                </arcgis-layer-list>
+                
+                <!-- 图例微件 -->
+                <arcgis-legend position="bottom-right"></arcgis-legend>
+                
+                <!-- 比例尺微件 -->
+                <arcgis-scale-bar position="bottom-left" unit="dual"></arcgis-scale-bar>
+                
+            </arcgis-map>
+        </div>
+
+        <!-- 区域3：底图库区域 -->
+        <div class="basemap-panel">
+            <div class="basemap-header">
+                🗺️ 切换底图库
+                <p>选择不同底图背景，洞察人口分布</p>
             </div>
-            <div class="basemap-gallery">
-                <h3>🎨 底图库</h3>
-                <div class="basemap-grid" id="basemapGrid"></div>
-                <div class="info-panel">
-                    <h3>📊 图层信息</h3>
-                    <p>📍 数据源：GeoScene Online</p>
-                    <p>🗺️ 图层：美国城市人口数量变化</p>
-                    <p>🔧 微件：比例尺 | 图例 | 搜索 | 图层列表</p>
-                    <p>📈 可视化：分级设色（人口数量）</p>
-                </div>
+            <div class="basemap-gallery-wrapper">
+                <arcgis-basemap-gallery id="basemapGallery"></arcgis-basemap-gallery>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- 使用国内CDN加速 -->
-    <script src="https://cdn.bootcdn.net/ajax/libs/arcgis-js-api/5.0.0/init.js"></script>
-    <script>
-        // 等待 ArcGIS API 加载完成
-        function initMap() {
-            require([
-                "esri/Map",
-                "esri/views/MapView",
-                "esri/layers/FeatureLayer",
-                "esri/widgets/ScaleBar",
-                "esri/widgets/Legend",
-                "esri/widgets/Search",
-                "esri/widgets/LayerList",
-                "esri/widgets/Zoom",
-                "esri/widgets/Home"
-            ], function(Map, MapView, FeatureLayer, ScaleBar, Legend, Search, LayerList, Zoom, Home) {
-                
-                console.log("✅ ArcGIS API 加载成功");
-                
-                // 创建图层
-                const populationLayer = new FeatureLayer({
-                    url: "https://www.geosceneonline.cn/server/rest/services/Hosted/美国城市人口数量变化116165/FeatureServer",
-                    title: "美国城市人口数量变化",
-                    outFields: ["*"],
-                    popupTemplate: {
-                        title: "城市信息",
-                        content: "城市名称: {NAME}<br>人口数量: {POPULATION}"
-                    }
-                });
-                
-                // 创建地图
-                const map = new Map({
-                    basemap: "osm-streets",
-                    layers: [populationLayer]
-                });
-                
-                // 创建视图
-                const view = new MapView({
-                    container: "viewDiv",
-                    map: map,
-                    center: [-100, 40],
-                    zoom: 4
-                });
-                
-                // 视图加载完成
-                view.when(function() {
-                    console.log("✅ 地图加载成功");
-                    document.getElementById('cityCount').innerText = "加载中...";
-                    
-                    // 查询城市数量
-                    populationLayer.queryFeatureCount().then(function(count) {
-                        document.getElementById('cityCount').innerText = count;
-                    }).catch(function(err) {
-                        document.getElementById('cityCount').innerText = "0";
-                    });
-                    
-                    view.watch('zoom', function(val) {
-                        document.getElementById('zoomLevel').innerText = val.toFixed(1);
-                    });
-                });
-                
-                // 添加微件
-                view.ui.add(new ScaleBar({ view: view, unit: "metric" }), "bottom-left");
-                view.ui.add(new Legend({ view: view }), "top-right");
-                view.ui.add(new Search({ view: view }), "top-left");
-                view.ui.add(new LayerList({ view: view }), "top-right");
-                view.ui.add(new Zoom({ view: view }), "bottom-right");
-                view.ui.add(new Home({ view: view }), "bottom-right");
-                
-                // 底图库
-                const basemaps = [
-                    { id: "osm-streets", name: "街道图", icon: "🌆" },
-                    { id: "satellite", name: "卫星图", icon: "🛰️" },
-                    { id: "hybrid", name: "混合图", icon: "🗺️" },
-                    { id: "terrain", name: "地形图", icon: "⛰️" }
-                ];
-                
-                const container = document.getElementById('basemapGrid');
-                basemaps.forEach(function(bm) {
-                    const card = document.createElement('div');
-                    card.className = 'basemap-card';
-                    card.innerHTML = `<div class="basemap-icon">${bm.icon}</div><div class="basemap-name">${bm.name}</div>`;
-                    card.onclick = function() {
-                        map.basemap = bm.id;
-                        document.querySelectorAll('.basemap-card').forEach(function(c) {
-                            c.classList.remove('active');
-                        });
-                        card.classList.add('active');
-                    };
-                    container.appendChild(card);
-                });
-                
-                console.log("✅ WebGIS应用启动完成");
-            });
+<script type="module">
+    // 使用 ArcGIS Maps SDK for JavaScript 5.0 核心模块化方式
+    import Map from 'https://js.arcgis.com/5.0/@arcgis/core/Map.js';
+    import FeatureLayer from 'https://js.arcgis.com/5.0/@arcgis/core/layers/FeatureLayer.js';
+    
+    // 获取地图组件的引用
+    const mapElement = document.getElementById('mainMap');
+    
+    // 创建底图
+    const map = new Map({
+        basemap: "topo-vector"
+    });
+    
+    // ========== 配置 GeoScene Online 专题图层（美国城市人口数量变化） ==========
+    // 图层 URL（已配置为你的服务地址 + 正确的图层序号 /0）
+    // 重要提示：请确保该图层在 GeoScene Online 中已设置为“公开”共享，否则会因权限问题无法加载
+    const populationLayer = new FeatureLayer({
+        url: "https://www.geosceneonline.cn/server/rest/services/Hosted/美国城市人口数量变化116165/FeatureServer/0",
+        title: "美国城市人口数量",
+        outFields: ["*"],
+        // 配置弹窗模板 - 使用 Population 字段
+        popupTemplate: {
+            title: "城市人口信息",
+            content: [
+                {
+                    type: "fields",
+                    fieldInfos: [
+                        { 
+                            fieldName: "Population", 
+                            label: "人口数量", 
+                            format: { 
+                                digitSeparator: true, 
+                                places: 0 
+                            } 
+                        }
+                    ]
+                }
+            ]
+        },
+        // 设置点样式渲染
+        renderer: {
+            type: "simple",
+            symbol: {
+                type: "simple-marker",
+                size: 10,
+                color: "#ff6b4a",
+                outline: {
+                    width: 1,
+                    color: "white"
+                }
+            }
         }
+    });
+    
+    // 将专题图层添加到地图
+    map.add(populationLayer);
+    
+    // 将配置好的 Map 实例赋值给 arcgis-map 组件
+    mapElement.map = map;
+    
+    // 等待地图组件加载完成，设置视图范围（美国本土范围）
+    mapElement.when(() => {
+        mapElement.goTo({
+            center: [-100, 38],
+            zoom: 4,
+            scale: 15000000
+        }, { duration: 800 }).catch(err => console.warn("视图跳转异常", err));
         
-        // 检查 API 是否已加载
-        if (typeof require !== 'undefined') {
-            initMap();
-        } else {
-            window.addEventListener('load', function() {
-                setTimeout(initMap, 500);
-            });
-        }
-    </script>
+        // 控制台输出提示
+        console.log("WebGIS应用已启动 | ArcGIS Maps SDK for JavaScript 5.0");
+        console.log("专题图层URL: https://www.geosceneonline.cn/server/rest/services/Hosted/美国城市人口数量变化116165/FeatureServer/0");
+        console.log("提示：如图层未显示，请检查该图层在GeoScene Online中是否已设置为'公开'共享");
+    });
+    
+    // 底图库联动：将底图库组件与主地图关联
+    const basemapGallery = document.getElementById('basemapGallery');
+    if (basemapGallery) {
+        basemapGallery.view = mapElement;
+        basemapGallery.source = {
+            portal: { url: "https://www.arcgis.com" }
+        };
+    }
+    
+    // 图层列表配置
+    const layerList = document.querySelector('arcgis-layer-list');
+    if (layerList) {
+        layerList.visibleElements = {
+            'status-indicator': true,
+            'toggle': true,
+            'opacity-slider': true
+        };
+    }
+</script>
 </body>
 </html>
